@@ -1,0 +1,524 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <style>
+      :root {
+        color-scheme: light;
+        box-sizing: border-box;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      html {
+        scroll-padding-top: env(safe-area-inset-top, 0px);
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font:
+          14px -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        background: #faf9f5;
+        color: #141413;
+      }
+      img {
+        max-width: 100%;
+      }
+      [hidden]:not([hidden="until-found" i]) {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <title>Dither Wipe Lab</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap"
+    />
+    <style>
+      /* Layout: 上に操作パネル、下に4つの実演を2列グリッド（スマホは1列）。主役はボタンの動きで、周囲は静かに。 */
+      :root {
+        --bg: #eef1f6;
+        --surface: #ffffff;
+        --fg: #121a2b;
+        --muted: #5a657a;
+        --accent: #1463ff;
+        --on-accent: #ffffff;
+        --line: #cdd4e0;
+        --code-bg: #e3e8f1;
+        --font-display: "DotGothic16", "Zen Kaku Gothic New", monospace;
+        --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
+        --font-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        --dot: 3px;
+        --dur: 600ms;
+        --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+        --d: calc(64 * var(--dot));
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #0d1220;
+          --surface: #151c2e;
+          --fg: #e8edf7;
+          --muted: #93a0b8;
+          --accent: #5b93ff;
+          --on-accent: #0d1220;
+          --line: #2a3450;
+          --code-bg: #1c2540;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #0d1220;
+        --surface: #151c2e;
+        --fg: #e8edf7;
+        --muted: #93a0b8;
+        --accent: #5b93ff;
+        --on-accent: #0d1220;
+        --line: #2a3450;
+        --code-bg: #1c2540;
+        color-scheme: dark;
+      }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: 15px;
+        line-height: 1.7;
+      }
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding-inline: 20px;
+        padding-block: 40px 64px;
+        display: grid;
+        gap: 32px;
+      }
+      h1 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: clamp(28px, 6vw, 44px);
+        line-height: 1.2;
+        margin: 0;
+        text-wrap: balance;
+      }
+      .lead {
+        margin: 8px 0 0;
+        color: var(--muted);
+        max-width: 40em;
+      }
+      h2 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: 20px;
+        margin: 0;
+      }
+
+      .panel {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px 28px;
+        align-items: end;
+        padding: 16px 20px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+      }
+      .field {
+        display: grid;
+        gap: 4px;
+        min-width: 150px;
+        flex: 1 1 150px;
+      }
+      .field label,
+      .check {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .field output {
+        color: var(--fg);
+        font-variant-numeric: tabular-nums;
+      }
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+      select {
+        font: inherit;
+        padding: 4px 8px;
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid var(--line);
+      }
+      .check {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex: 1 1 150px;
+      }
+      .check input {
+        accent-color: var(--accent);
+        width: 16px;
+        height: 16px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+        gap: 40px 32px;
+      }
+      .demo {
+        display: grid;
+        gap: 12px;
+        align-content: start;
+        min-width: 0;
+      }
+      .demo p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      pre {
+        margin: 0;
+        padding: 12px 14px;
+        background: var(--code-bg);
+        font-family: var(--font-code);
+        font-size: 12px;
+        line-height: 1.6;
+        overflow-x: auto;
+      }
+
+      /* ---- 共通のボタン ---- */
+      .d {
+        position: relative;
+        isolation: isolate;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 64px;
+        padding: 12px 20px;
+        cursor: pointer;
+        font-family: var(--font-display);
+        font-size: 18px;
+        letter-spacing: 0.04em;
+        color: var(--accent);
+        background: var(--surface);
+        border: 2px solid var(--accent);
+        transition: color var(--dur) var(--ease);
+      }
+      .d:focus-visible {
+        outline: 3px solid var(--fg);
+        outline-offset: 3px;
+      }
+      .d::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background: var(--accent);
+        transition:
+          mask-position var(--dur) var(--ease),
+          -webkit-mask-position var(--dur) var(--ease);
+      }
+      .d:is(:hover, :focus-visible, [aria-pressed="true"]) {
+        color: var(--on-accent);
+      }
+
+      /* 1. 元の動き：左→右 */
+      .d-right::before {
+        -webkit-mask-image: var(--ramp-r), linear-gradient(#000, #000);
+        mask-image: var(--ramp-r), linear-gradient(#000, #000);
+        -webkit-mask-repeat: repeat-y, no-repeat;
+        mask-repeat: repeat-y, no-repeat;
+        -webkit-mask-size:
+          var(--d) calc(8 * var(--dot)),
+          200% 100%;
+        mask-size:
+          var(--d) calc(8 * var(--dot)),
+          200% 100%;
+        -webkit-mask-position:
+          calc(0% - var(--d)) 0,
+          calc(200% - var(--d)) 0;
+        mask-position:
+          calc(0% - var(--d)) 0,
+          calc(200% - var(--d)) 0;
+      }
+      .d-right:is(:hover, :focus-visible, [aria-pressed="true"])::before {
+        -webkit-mask-position:
+          calc(100% + var(--d)) 0,
+          100% 0;
+        mask-position:
+          calc(100% + var(--d)) 0,
+          100% 0;
+      }
+
+      /* 2. 下→上 */
+      .d-up {
+        min-height: 140px;
+      }
+      .d-up::before {
+        -webkit-mask-image: var(--ramp-u), linear-gradient(#000, #000);
+        mask-image: var(--ramp-u), linear-gradient(#000, #000);
+        -webkit-mask-repeat: repeat-x, no-repeat;
+        mask-repeat: repeat-x, no-repeat;
+        -webkit-mask-size:
+          calc(8 * var(--dot)) var(--d),
+          100% 200%;
+        mask-size:
+          calc(8 * var(--dot)) var(--d),
+          100% 200%;
+        -webkit-mask-position:
+          0 calc(100% + var(--d)),
+          0 calc(-100% + var(--d));
+        mask-position:
+          0 calc(100% + var(--d)),
+          0 calc(-100% + var(--d));
+      }
+      .d-up:is(:hover, :focus-visible, [aria-pressed="true"])::before {
+        -webkit-mask-position:
+          0 calc(0% - var(--d)),
+          0 0%;
+        mask-position:
+          0 calc(0% - var(--d)),
+          0 0%;
+      }
+
+      /* 3. 左右から中央へ閉じる */
+      .d-close::before {
+        -webkit-mask-image: var(--ramp-r), linear-gradient(#000, #000), var(--ramp-l), linear-gradient(#000, #000);
+        mask-image: var(--ramp-r), linear-gradient(#000, #000), var(--ramp-l), linear-gradient(#000, #000);
+        -webkit-mask-repeat: repeat-y, no-repeat, repeat-y, no-repeat;
+        mask-repeat: repeat-y, no-repeat, repeat-y, no-repeat;
+        -webkit-mask-size:
+          var(--d) calc(8 * var(--dot)),
+          200% 100%,
+          var(--d) calc(8 * var(--dot)),
+          200% 100%;
+        mask-size:
+          var(--d) calc(8 * var(--dot)),
+          200% 100%,
+          var(--d) calc(8 * var(--dot)),
+          200% 100%;
+        -webkit-mask-position:
+          calc(0% - var(--d)) 0,
+          calc(200% - var(--d)) 0,
+          calc(100% + var(--d)) 0,
+          calc(-100% + var(--d)) 0;
+        mask-position:
+          calc(0% - var(--d)) 0,
+          calc(200% - var(--d)) 0,
+          calc(100% + var(--d)) 0,
+          calc(-100% + var(--d)) 0;
+      }
+      .d-close:is(:hover, :focus-visible, [aria-pressed="true"])::before {
+        -webkit-mask-position:
+          calc(50% + var(--d) / 2) 0,
+          150% 0,
+          calc(50% - var(--d) / 2) 0,
+          -50% 0;
+        mask-position:
+          calc(50% + var(--d) / 2) 0,
+          150% 0,
+          calc(50% - var(--d) / 2) 0,
+          -50% 0;
+      }
+
+      /* 4. ディザの帯が走り抜ける（ループ） */
+      .d-scan {
+        color: var(--on-accent);
+        background: var(--accent);
+      }
+      .d-scan::before {
+        background: var(--on-accent);
+        opacity: 0.45;
+        z-index: 0;
+        -webkit-mask-image: var(--ramp-l), var(--ramp-r);
+        mask-image: var(--ramp-l), var(--ramp-r);
+        -webkit-mask-repeat: repeat-y;
+        mask-repeat: repeat-y;
+        -webkit-mask-size: var(--d) calc(8 * var(--dot));
+        mask-size: var(--d) calc(8 * var(--dot));
+        -webkit-mask-position:
+          calc(0% - 2 * var(--d)) 0,
+          calc(0% - var(--d)) 0;
+        mask-position:
+          calc(0% - 2 * var(--d)) 0,
+          calc(0% - var(--d)) 0;
+      }
+      .d-scan:is(:hover, :focus-visible, [aria-pressed="true"])::before {
+        animation: scan calc(var(--dur) * 2) var(--ease) infinite;
+      }
+      @keyframes scan {
+        to {
+          -webkit-mask-position:
+            calc(100% + var(--d)) 0,
+            calc(100% + 2 * var(--d)) 0;
+          mask-position:
+            calc(100% + var(--d)) 0,
+            calc(100% + 2 * var(--d)) 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .d,
+        .d::before {
+          transition-duration: 1ms;
+        }
+        .d-scan::before {
+          animation: none !important;
+        }
+      }
+    </style>
+
+    <div class="wrap">
+      <header>
+        <h1>Dither Wipe Lab</h1>
+        <p class="lead">
+          元のディザワイプと、マスクの向きと枚数を変えたアレンジ3つです。ホバーかタップで動きます。ディザ画像は 8×8
+          のベイヤー行列から生成しています。
+        </p>
+      </header>
+
+      <div class="panel">
+        <div class="field">
+          <label for="dot">ドットの大きさ <output id="dotOut">3px</output></label>
+          <input type="range" id="dot" min="1" max="8" step="1" value="3" />
+        </div>
+        <div class="field">
+          <label for="dur">時間 <output id="durOut">600ms</output></label>
+          <input type="range" id="dur" min="200" max="1600" step="100" value="600" />
+        </div>
+        <div class="field">
+          <label for="ease">動き方</label>
+          <select id="ease">
+            <option value="cubic-bezier(.2,.7,.2,1)">なめらか</option>
+            <option value="steps(10, end)">コマ送り（10コマ）</option>
+            <option value="linear">等速</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="pin" /> 全部を塗った状態で固定</label>
+      </div>
+
+      <div class="grid">
+        <section class="demo">
+          <h2>1. 左から右（元の動き）</h2>
+          <p>ディザ1枚とベタ1枚を横に並べて流します。</p>
+          <button class="d d-right" type="button" aria-pressed="false">お問い合わせ</button>
+          <pre>
+mask-repeat: repeat-y, no-repeat;
+/* hover */
+mask-position: calc(100% + D) 0, 100% 0;</pre
+          >
+        </section>
+
+        <section class="demo">
+          <h2>2. 左右から閉じる</h2>
+          <p>反転したディザを足して4枚にし、中央で合流させます。</p>
+          <button class="d d-close" type="button" aria-pressed="false">資料をダウンロード</button>
+          <pre>
+mask-image: ramp-r, solid, ramp-l, solid;
+/* hover */
+mask-position: calc(50% + D/2) 0, 150% 0,
+               calc(50% - D/2) 0, -50% 0;</pre
+          >
+        </section>
+
+        <section class="demo">
+          <h2>3. 下からせり上がる</h2>
+          <p>ディザを縦向き（8×64）にして repeat-x。カードやサムネイル向きです。</p>
+          <button class="d d-up" type="button" aria-pressed="false">採用情報を見る</button>
+          <pre>
+mask-repeat: repeat-x, no-repeat;
+mask-size: calc(8 * dot) D, 100% 200%;
+/* hover */
+mask-position: 0 calc(0% - D), 0 0%;</pre
+          >
+        </section>
+
+        <section class="demo">
+          <h2>4. 帯が走り抜ける</h2>
+          <p>ベタを抜いてディザ2枚を背中合わせにし、ホバー中ループさせます。</p>
+          <button class="d d-scan" type="button" aria-pressed="false">送信する</button>
+          <pre>
+mask-image: ramp-l, ramp-r; /* ベタなし */
+@keyframes scan { to {
+  mask-position: calc(100% + D) 0,
+                 calc(100% + 2 * D) 0; } }</pre
+          >
+        </section>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var B = [
+          [0, 32, 8, 40, 2, 34, 10, 42],
+          [48, 16, 56, 24, 50, 18, 58, 26],
+          [12, 44, 4, 36, 14, 46, 6, 38],
+          [60, 28, 52, 20, 62, 30, 54, 22],
+          [3, 35, 11, 43, 1, 33, 9, 41],
+          [51, 19, 59, 27, 49, 17, 57, 25],
+          [15, 47, 7, 39, 13, 45, 5, 37],
+          [63, 31, 55, 23, 61, 29, 53, 21],
+        ];
+        // i: 濃い側からの距離 0..63。手前16マスはベタ、そこから徐々に間引く
+        function on(i, a, b) {
+          return Math.min(1, (64 - i) / 48) > (B[a % 8][b % 8] + 0.5) / 64;
+        }
+        function ramp(dir) {
+          var vert = dir === "u",
+            w = vert ? 8 : 64,
+            h = vert ? 64 : 8,
+            p = "";
+          for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++) {
+              var i = dir === "r" ? x : dir === "l" ? 63 - x : 63 - y;
+              if (on(i, y, x)) p += "M" + x + " " + y + "h1v1h-1z";
+            }
+          var svg =
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 " +
+            w +
+            " " +
+            h +
+            "' shape-rendering='crispEdges'><path d='" +
+            p +
+            "'/></svg>";
+          return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
+        }
+        var root = document.documentElement.style;
+        ["r", "l", "u"].forEach(function (d) {
+          root.setProperty("--ramp-" + d, ramp(d));
+        });
+
+        function $(id) {
+          return document.getElementById(id);
+        }
+        function sync() {
+          root.setProperty("--dot", $("dot").value + "px");
+          $("dotOut").textContent = $("dot").value + "px";
+          root.setProperty("--dur", $("dur").value + "ms");
+          $("durOut").textContent = $("dur").value + "ms";
+          root.setProperty("--ease", $("ease").value);
+        }
+        ["dot", "dur", "ease"].forEach(function (id) {
+          $(id).addEventListener("input", sync);
+        });
+        sync();
+
+        var btns = [].slice.call(document.querySelectorAll(".d"));
+        btns.forEach(function (b) {
+          b.addEventListener("click", function () {
+            b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true");
+          });
+        });
+        $("pin").addEventListener("change", function () {
+          var v = String($("pin").checked);
+          btns.forEach(function (b) {
+            b.setAttribute("aria-pressed", v);
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
